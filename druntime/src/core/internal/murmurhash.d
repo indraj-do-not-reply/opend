@@ -61,51 +61,90 @@ ulong murmurHash(const ulong seed, const(ubyte)[] data)
                 h = (h << r1) | (h >>> (size_t.sizeof * 8 - r1));
                 h = (h * c2) ^ seed;
                 h = (h << r2) | (h >>> (size_t.sizeof * 8 - r2));
-                return h * 5 + c3;
+                res = h * 5 + c3;
+
+        } else {
+
+                auto d = data.ptr;
+                auto nblocks = len / 4;
+
+                uint h1 = cast(uint) seed;
+
+                enum uint c1 = 0xcc9e2d51;
+                enum uint c2 = 0x1b873593;
+                enum uint c3 = 0xe6546b64;
+
+                auto end_d = d + nblocks * uint.sizeof;
+
+                for (; d != end_d; d += uint.sizeof) {
+                        uint k1 = get32bits(d);
+                        k1 *= c1;
+                        k1 = (k1 << 15) | (k1 >> (32 - 15));
+                        k1 *= c2;
+
+                        h1 ^= k1;
+                        h1 = (h1 << 13) | (h1 >> (32 - 13));
+                        h1 = h1*5+c3;
+                }
+
+                //----------
+                // tail
+                uint k1 = 0;
+
+                switch (len & 3)
+                {
+                        case 3: k1 ^= d[2] << 16; goto case;
+                        case 2: k1 ^= d[1] << 8;  goto case;
+                        case 1: k1 ^= d[0];
+                                        k1 *= c1; k1 = (k1 << 15) | (k1 >> (32 - 15)); k1 *= c2; h1 ^= k1;
+                                        goto default;
+                        default:
+                }
+
+                //----------
+                // finalization
+                h1 ^= len;
+                // Force all bits of the hash block to avalanche.
+                h1 = (h1 ^ (h1 >> 16)) * 0x85ebca6b;
+                h1 = (h1 ^ (h1 >> 13)) * 0xc2b2ae35;
+                h1 ^= h1 >> 16;
+                res = h1;
         }
 
-        auto d = data.ptr;
-        auto nblocks = len / 4;
+        // final mix function of MurmurHash2
+        enum m = 0x5bd1e995;
+        res ^= res >> 13;
+        res *= m;
+        res ^= res >> 15;
+        return res;
+}
 
-        uint h1 = cast(uint) seed;
-
-        enum uint c1 = 0xcc9e2d51;
-        enum uint c2 = 0x1b873593;
-        enum uint c3 = 0xe6546b64;
-
-        auto end_d = d + nblocks * uint.sizeof;
-
-        for (; d != end_d; d += uint.sizeof) {
-                uint k1 = get32bits(d);
-                k1 *= c1;
-                k1 = (k1 << 15) | (k1 >> (32 - 15));
-                k1 *= c2;
-
-                h1 ^= k1;
-                h1 = (h1 << 13) | (h1 >> (32 - 13));
-                h1 = h1*5+c3;
-        }
-
-        //----------
-        // tail
-        uint k1 = 0;
-
-        switch (len & 3)
+unittest
+{
+        struct Vector
         {
-                case 3: k1 ^= d[2] << 16; goto case;
-                case 2: k1 ^= d[1] << 8;  goto case;
-                case 1: k1 ^= d[0];
-                                k1 *= c1; k1 = (k1 << 15) | (k1 >> (32 - 15)); k1 *= c2; h1 ^= k1;
-                                goto default;
-                default:
+                ulong seed;
+                ulong expected;
+                string input;
         }
 
-        //----------
-        // finalization
-        h1 ^= len;
-        // Force all bits of the hash block to avalanche.
-        h1 = (h1 ^ (h1 >> 16)) * 0x85ebca6b;
-        h1 = (h1 ^ (h1 >> 13)) * 0xc2b2ae35;
-        h1 ^= h1 >> 16;
-        return h1;
+        static immutable Vector[] vectors = [
+                Vector(0, 0x1db93ed9df6d1293, ""),
+                Vector(1, 0xa5a0d04453329634, "a"),
+                Vector(2, 0x69ff236c2fda28da, "abc"),
+                Vector(3, 0x2285dc4950050b12, "message digest"),
+                Vector(4, 0x4d1be45366ac8f2b, "abcdefghijklmnopqrstuvwxyz"),
+                Vector(5, 0x53edb91f1a78e1af, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"),
+                Vector(6, 0x3509a0a11ce092eb, "12345678901234567890123456789012345678901234567890123456789012345678901234567890"),
+        ];
+
+        foreach (v; vectors)
+                assert(murmurHash(v.seed,
+                                  cast(const(ubyte)[]) v.input)
+                                  == v.expected);
+
+        static foreach (v; vectors)
+                static assert(murmurHash(v.seed,
+                                         cast(const(ubyte)[]) v.input)
+                                         == v.expected);
 }
