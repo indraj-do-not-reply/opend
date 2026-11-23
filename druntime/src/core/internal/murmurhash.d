@@ -42,11 +42,15 @@ private uint get32bits(const(ubyte)* x)
 ulong murmurHash(const ulong seed, const(ubyte)[] data)
 {
         auto len = data.length;
+        ulong res;
 
         if (len < 4) {
-                ulong val = (cast(ulong) data[0] << 16) |
-                            (cast(ulong) data[len >> 1] << 8) |
-                             data[len - 1];
+                ulong val = 0;
+                if (len > 0) {
+                        val = (cast(ulong) data[0] << 16) |
+                              (cast(ulong) data[len >> 1] << 8) |
+                               data[len - 1];
+                }
 
                 enum ulong c1 = 0x87c37b91114253d5;
                 enum ulong c2 = 0x4cf5ad432745937f;
